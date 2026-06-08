@@ -1,0 +1,13 @@
+*.log
+logs/
+*.credential
+*.secret
+*.key
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+venv/
+temp/
+tmp/

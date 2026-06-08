@@ -1,0 +1,96 @@
+title: Suspicious Scheduled Task Creation
+id: 66778899-aabb-ccdd-eeff-0011223344556
+status: production
+description: |
+  Detects when schtasks.exe is used to create new scheduled tasks, especially with 
+  suspicious parameters. Scheduled tasks are a common persistence mechanism where 
+  malware runs at system startup or on a regular schedule.
+  
+  This is a PERSISTENCE indicator following initial access. When combined with script 
+  execution or Office macro alerts, indicates complete attack chain.
+  
+  Attack Pattern: Malware/Macro → powershell schtasks /Create → Persistence
+  Severity: CRITICAL
+  
+author: SOC Threat Hunting Playbook
+date: 2026-06-07
+tags:
+  - attack.persistence
+  - attack.t1053.005
+  - detection.persistence
+  - scheduled_task
+  - sysmon
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  schtasks:
+    Image|endswith: '\schtasks.exe'
+  
+  create_flag:
+    CommandLine|contains: '/Create'
+  
+  suspicious_params:
+    CommandLine|contains:
+      - 'powershell'
+      - 'cmd.exe'
+      - 'wscript'
+      - 'cscript'
+      - 'certutil'
+      - 'bitsadmin'
+      - 'mshta'
+      - 'rundll32'
+  
+  condition: schtasks and create_flag and suspicious_params
+
+falsepositives:
+  - Legitimate scheduled tasks (whitelist known admin tasks)
+  - Windows updates (whitelist Windows Update processes)
+  - Antivirus/EDR scheduled tasks (whitelist vendor processes)
+  - Backup software (whitelist by vendor)
+
+level: critical
+
+fields:
+  - Image
+  - CommandLine
+  - User
+  - Computer
+  - ParentImage
+  - ParentProcessId
+
+timeframe: 5m
+groupby:
+  - User
+  - Computer
+  - CommandLine
+
+windows_logsource:
+  channel: Microsoft-Windows-Sysmon/Operational
+  event_id: 1
+
+mitre_attack:
+  - technique: T1053
+    subtechnique: T1053.005
+    name: Scheduled Task
+  - technique: T1059
+    subtechnique: T1059.001
+    name: PowerShell
+
+correlation:
+  - Correlate with office_macros.yml alert
+  - Correlate with scripts_user_folders.yml alert
+  - Look for preceding download activity
+  - Check for network connections from scheduled task
+
+notes:
+  - schtasks /Create is strong persistence indicator
+  - Often used immediately after initial compromise
+  - Survivor reboot indicates successful persistence
+  - Scheduled tasks run with system/admin privileges
+
+references:
+  - Lab Example: Lab #1 - Excel Macro Persistence
+  - MITRE: T1053.005 - Scheduled Task

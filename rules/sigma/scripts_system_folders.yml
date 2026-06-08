@@ -1,0 +1,83 @@
+title: Script Execution from System/Writable Directories (Persistence)
+id: 11223344-5566-7788-99aa-bbccddeeff00
+status: production
+description: |
+  Detects when script hosts execute scripts from suspicious system-level or writable 
+  directories such as C:\ProgramData, C:\Temp, or C:\Windows\Temp.
+  
+  This indicates an established compromise where attacker has already placed scripts 
+  for persistence. These scripts typically run via scheduled tasks without user interaction.
+  
+  Attack Pattern: Malware drops script → Creates scheduled task → Auto-execution
+  Severity: CRITICAL
+  
+author: SOC Threat Hunting Playbook
+date: 2026-06-07
+tags:
+  - attack.execution
+  - attack.t1059.005
+  - detection.persistence
+  - script_persistence
+  - sysmon
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  script_host:
+    Image|endswith:
+      - '\wscript.exe'
+      - '\cscript.exe'
+  
+  system_folder:
+    CommandLine|re:
+      - '.*\\ProgramData\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+      - '.*\\Temp\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+      - '.*\\Windows\\Temp\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+      - '.*\\AppData\\Local\\Temp\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+  
+  condition: script_host and system_folder
+
+falsepositives:
+  - Legitimate system scripts (extremely rare)
+  - Windows Update scripts (whitelist specific paths)
+  - Antivirus/EDR scripts (whitelist vendor paths)
+
+level: critical
+
+fields:
+  - Image
+  - CommandLine
+  - User
+  - Computer
+  - ParentImage
+  - ParentProcessId
+
+timeframe: 5m
+groupby:
+  - Computer
+  - User
+  - CommandLine
+
+windows_logsource:
+  channel: Microsoft-Windows-Sysmon/Operational
+  event_id: 1
+
+mitre_attack:
+  - technique: T1059
+    subtechnique: T1059.005
+    name: Visual Basic Script
+  - technique: T1053
+    subtechnique: T1053.005
+    name: Scheduled Task (when combined with schtasks creation)
+
+alert_enrichment:
+  - Check for corresponding schtasks creation event
+  - Correlate with file creation in ProgramData
+  - Look for parent process (usually svchost.exe for scheduled tasks)
+  - Check for network activity from script
+
+references:
+  - Lab Example: Lab #2 - Detecting Stand-Alone Script from ProgramData
+  - Real Data: C:\ProgramData\downloader.js execution detected

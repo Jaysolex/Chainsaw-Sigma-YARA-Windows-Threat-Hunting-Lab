@@ -1,0 +1,77 @@
+title: Suspicious Script Execution from User Folder
+id: 87654321-4321-4321-4321-210987654321
+status: production
+description: |
+  Detects when script hosts (WScript.exe, CScript.exe) execute scripts from user-controlled 
+  directories such as Desktop, Downloads, Documents, or user AppData folders.
+  
+  This is a classic initial access pattern where attacker sends script as email attachment,
+  user downloads to typical location, and double-clicks to execute.
+  
+  Attack Pattern: User downloads script → Double-clicks → explorer.exe → WScript.exe
+  Severity: HIGH
+  
+author: SOC Threat Hunting Playbook
+date: 2026-06-07
+tags:
+  - attack.execution
+  - attack.t1059.005
+  - detection.initial_access
+  - script_execution
+  - sysmon
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  script_host:
+    Image|endswith:
+      - '\wscript.exe'
+      - '\cscript.exe'
+  
+  user_folder:
+    CommandLine|re:
+      - '.*\\Desktop\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+      - '.*\\Downloads\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+      - '.*\\Documents\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+      - '.*\\AppData\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+      - '.*\\Temp\\.*\.(js|jse|vbs|vbe|vba|wsf)'
+  
+  condition: script_host and user_folder
+
+falsepositives:
+  - Legitimate VBScript applications (rare)
+  - Administrative scripts in user folders (extremely rare)
+  - Development environments (whitelist specific developers)
+
+level: high
+
+fields:
+  - Image
+  - CommandLine
+  - User
+  - Computer
+  - ParentImage
+
+timeframe: 5m
+groupby:
+  - User
+  - Computer
+  - Image
+
+windows_logsource:
+  channel: Microsoft-Windows-Sysmon/Operational
+  event_id: 1
+
+mitre_attack:
+  - technique: T1566
+    subtechnique: T1566.001
+    name: Phishing
+  - technique: T1059
+    subtechnique: T1059.005
+    name: Visual Basic Script
+
+references:
+  - https://attack.mitre.org/techniques/T1059/005/
+  - Lab Example: Example #2 - Stand-Alone Script Execution

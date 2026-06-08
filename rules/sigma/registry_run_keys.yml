@@ -1,0 +1,108 @@
+title: Suspicious Registry Run Key Modification
+id: 88999aaa-bbbb-cccc-dddd-eeee0000ffff
+status: production
+description: |
+  Detects when registry is modified to add entries to Run or RunOnce keys.
+  These are persistence mechanisms - entries execute on every system startup.
+  
+  HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run
+  HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
+  
+  Malware often adds entries pointing to malicious executables or scripts.
+  
+  Attack Pattern: Malware → Adds HKLM\Run key → Executes on reboot
+  Severity: CRITICAL
+  
+author: SOC Threat Hunting Playbook
+date: 2026-06-07
+tags:
+  - attack.persistence
+  - attack.t1547.001
+  - detection.persistence
+  - registry_persistence
+  - sysmon
+
+logsource:
+  category: registry_set
+  product: windows
+
+detection:
+  registry_location:
+    TargetObject|contains:
+      - 'HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run'
+      - 'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run'
+      - 'HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+      - 'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+  
+  suspicious_value:
+    Details|contains:
+      - 'powershell'
+      - 'cmd.exe'
+      - 'wscript'
+      - 'cscript'
+      - 'mshta'
+      - 'certutil'
+      - 'bitsadmin'
+      - '.hta'
+      - '.vbs'
+      - '.js'
+      - '.bat'
+  
+  condition: registry_location and suspicious_value
+
+falsepositives:
+  - Legitimate software installation (whitelist by vendor/path)
+  - Windows updates (whitelist Windows Update processes)
+  - Administrative scripts (document and whitelist)
+  - Third-party applications (document known good entries)
+
+level: critical
+
+fields:
+  - TargetObject
+  - Details
+  - Image
+  - User
+  - Computer
+
+timeframe: 5m
+groupby:
+  - User
+  - Computer
+  - Image
+
+windows_logsource:
+  channel: Microsoft-Windows-Sysmon/Operational
+  event_id: 13
+
+mitre_attack:
+  - technique: T1547
+    subtechnique: T1547.001
+    name: Boot or Logon Initialization Scripts - Registry Run Keys
+  - technique: T1547
+    subtechnique: T1547.012
+    name: Print Processors
+
+alert_enrichment:
+  - Identify source process that created entry
+  - Extract full registry key value
+  - Validate if path exists on disk
+  - Check file metadata (timestamps, signatures)
+  - Monitor for execution of run key contents
+
+notes:
+  - HKLM\Run requires admin/system privileges
+  - HKCU\Run can be modified by user-level malware
+  - Entries survive reboot - strong persistence indicator
+  - Check both Run and RunOnce keys
+  - Look for parent process (often explorer.exe, services.exe, or initial access process)
+
+correlation:
+  - Correlate with file creation in same directory
+  - Look for preceding network activity
+  - Check for schtasks creation (dual persistence)
+  - Monitor for execution of specified executable
+
+references:
+  - MITRE: T1547.001 - Boot or Logon Initialization Scripts Registry Run Keys
+  - Persistence Indicator: Run keys survive reboot

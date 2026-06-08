@@ -1,0 +1,92 @@
+title: Malicious CHM Help File Execution
+id: 99aabbcc-ddee-0011-2233-445566778899
+status: production
+description: |
+  Detects when hh.exe (HTML Help Viewer) spawns suspicious child processes.
+  CHM (Compiled HTML Help) files can contain embedded scripts that execute 
+  when the file is opened, often without user awareness.
+  
+  Attackers weaponize CHM files because they appear legitimate and can bypass 
+  some security controls. CHM execution is uncommon in normal workflows.
+  
+  Attack Pattern: Email attachment .CHM file → Double-click → hh.exe → Script execution
+  Severity: HIGH
+  
+author: SOC Threat Hunting Playbook
+date: 2026-06-07
+tags:
+  - attack.execution
+  - attack.t1566.001
+  - detection.chm_attack
+  - script_execution
+  - sysmon
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  chm_parent:
+    ParentImage|endswith: '\hh.exe'
+  
+  suspicious_child:
+    Image|endswith:
+      - '\powershell.exe'
+      - '\cmd.exe'
+      - '\cscript.exe'
+      - '\wscript.exe'
+      - '\rundll32.exe'
+      - '\regsvcs.exe'
+      - '\certutil.exe'
+      - '\bitsadmin.exe'
+  
+  condition: chm_parent and suspicious_child
+
+falsepositives:
+  - Legitimate CHM help files (very rare)
+  - Windows built-in CHM files (whitelisted)
+  - MSSQL Server help (whitelisted if in environment)
+
+level: high
+
+fields:
+  - ParentImage
+  - Image
+  - CommandLine
+  - User
+  - Computer
+  - ParentProcessId
+
+timeframe: 5m
+groupby:
+  - User
+  - Computer
+  - Image
+
+windows_logsource:
+  channel: Microsoft-Windows-Sysmon/Operational
+  event_id: 1
+
+mitre_attack:
+  - technique: T1566
+    subtechnique: T1566.001
+    name: Phishing - Spearphishing Attachment
+  - technique: T1059
+    name: Command and Scripting Interpreter
+
+alert_enrichment:
+  - Locate source CHM file
+  - Extract CHM contents for analysis
+  - Check for embedded JavaScript/VBScript
+  - Trace downloaded payloads
+  - Check file metadata
+
+notes:
+  - CHM files are relatively uncommon, so process-level detection is effective
+  - hh.exe is Windows HTML Help Viewer (legitimate binary)
+  - Alert on any suspicious child of hh.exe
+  - Recommended: Whitelisting legitimate internal help files
+
+references:
+  - Lab Example: Lab #4 - CHM File Detection
+  - MITRE: T1566.001 - Phishing Spearphishing Attachment

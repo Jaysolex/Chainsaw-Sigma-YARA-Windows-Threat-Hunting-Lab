@@ -1,0 +1,88 @@
+title: Malicious HTA (HTML Application) Execution
+id: 44556677-8899-aabb-ccdd-eeff00112233
+status: production
+description: |
+  Detects when mshta.exe spawns suspicious child processes or executes 
+  with suspicious command-line arguments. HTA files are legitimate but rarely used,
+  making them attractive for attackers.
+  
+  Attackers weaponize HTA files because mshta.exe is a legitimate Windows binary 
+  that can execute VBScript and JavaScript, and files are often not monitored closely.
+  
+  Attack Pattern: .HTA file downloaded → Double-click → mshta.exe → VBScript/JS execution
+  Severity: HIGH
+  
+author: SOC Threat Hunting Playbook
+date: 2026-06-07
+tags:
+  - attack.execution
+  - attack.t1566.001
+  - detection.hta_attack
+  - lolbin_abuse
+  - sysmon
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  hta_process:
+    Image|endswith: '\mshta.exe'
+  
+  suspicious_cmdline:
+    CommandLine|contains:
+      - 'powershell'
+      - 'cmd.exe'
+      - 'wscript'
+      - 'cscript'
+      - 'http://'
+      - 'ftp://'
+      - 'javascript:'
+      - 'vbscript:'
+  
+  condition: hta_process and suspicious_cmdline
+
+falsepositives:
+  - Legitimate HTA applications (documented in environment)
+  - Internal web-based tools using HTA (whitelist specific applications)
+  - Corporate applications using HTA framework (rare)
+
+level: high
+
+fields:
+  - Image
+  - CommandLine
+  - User
+  - Computer
+  - ParentImage
+
+timeframe: 5m
+groupby:
+  - User
+  - Computer
+  - CommandLine
+
+windows_logsource:
+  channel: Microsoft-Windows-Sysmon/Operational
+  event_id: 1
+
+mitre_attack:
+  - technique: T1566
+    subtechnique: T1566.001
+    name: Phishing - Spearphishing Attachment
+  - technique: T1218
+    subtechnique: T1218.005
+    name: Signed Binary Proxy Execution - Mshta
+  - technique: T1059
+    name: Command and Scripting Interpreter
+
+alert_enrichment:
+  - Locate source HTA file
+  - Analyze HTA contents for embedded scripts
+  - Check network connections for payload download
+  - Monitor for persistence mechanisms
+  - Review file metadata
+
+references:
+  - Lab Example: Malicious HTA Execution
+  - MITRE: T1218.005 - Signed Binary Proxy Execution Mshta

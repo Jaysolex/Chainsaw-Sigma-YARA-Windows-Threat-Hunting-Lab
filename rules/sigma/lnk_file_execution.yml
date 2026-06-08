@@ -1,0 +1,105 @@
+title: Suspicious LNK File Execution via explorer.exe
+id: 55667788-99aa-bbcc-ddee-ff0011223344
+status: production
+description: |
+  Detects when explorer.exe launches suspicious processes following LNK file execution.
+  LNK files can contain hidden commands that execute instead of opening the target file.
+  
+  Attackers use LNK files because they can be disguised with legitimate icons 
+  (e.g., "Invoice.docx.lnk" with Word icon) and hidden command is executed silently.
+  
+  Attack Pattern: User double-clicks LNK → explorer.exe → Hidden command executes
+  Severity: CRITICAL
+  
+author: SOC Threat Hunting Playbook
+date: 2026-06-07
+tags:
+  - attack.execution
+  - attack.t1566.001
+  - detection.lnk_attack
+  - lolbin_abuse
+  - sysmon
+
+logsource:
+  category: process_creation
+  product: windows
+
+detection:
+  explorer_parent:
+    ParentImage|endswith: '\explorer.exe'
+  
+  suspicious_process:
+    Image|endswith:
+      - '\powershell.exe'
+      - '\cmd.exe'
+      - '\certutil.exe'
+      - '\bitsadmin.exe'
+      - '\msiexec.exe'
+      - '\rundll32.exe'
+      - '\regsvcs.exe'
+      - '\regasm.exe'
+      - '\mshta.exe'
+      - '\cscript.exe'
+      - '\wscript.exe'
+  
+  suspicious_flags:
+    CommandLine|contains:
+      - '-urlcache'
+      - '-split'
+      - '-f'
+      - '/c'
+      - 'http'
+      - 'ftp'
+      - '-ExecutionPolicy'
+      - 'Bypass'
+      - 'Register-ScheduledTask'
+      - '-Command'
+  
+  condition: explorer_parent and suspicious_process and suspicious_flags
+
+falsepositives:
+  - Legitimate shortcut usage (rare with suspicious flags)
+  - Windows built-in shortcuts (typically don't have suspicious flags)
+  - Whitelisted administrator shortcuts (document these)
+
+level: critical
+
+fields:
+  - ParentImage
+  - Image
+  - CommandLine
+  - User
+  - Computer
+  - CommandLine
+
+timeframe: 5m
+groupby:
+  - User
+  - Computer
+  - ParentImage
+
+windows_logsource:
+  channel: Microsoft-Windows-Sysmon/Operational
+  event_id: 1
+
+mitre_attack:
+  - technique: T1566
+    subtechnique: T1566.001
+    name: Phishing - Spearphishing Attachment
+  - technique: T1547
+    subtechnique: T1547.009
+    name: Shortcut Modification
+  - technique: T1105
+    name: Ingress Tool Transfer (downloads via certutil/bitsadmin)
+
+alert_enrichment:
+  - Correlate with YARA rule: malicious_lnk.yar
+  - Check file metadata of LNK file
+  - Analyze Target field from LNK file properties
+  - Investigate downloaded payload from network logs
+  - Check for persistence setup (schtasks, registry)
+
+references:
+  - Lab Example: Lab #3 - Malicious LNK Detection
+  - YARA Rule: malicious_lnk.yar
+  - LOLBIN Reference: certutil.exe abused for downloads
